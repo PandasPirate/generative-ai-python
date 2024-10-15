@@ -13,6 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import dataclasses
+import enum
 import pathlib
 import typing_extensions
 from typing import Any, Union, Iterable
@@ -34,6 +35,10 @@ TEST_PNG_DATA = TEST_PNG_PATH.read_bytes()
 TEST_JPG_PATH = HERE / "test_img.jpg"
 TEST_JPG_URL = "https://storage.googleapis.com/generativeai-downloads/data/test_img.jpg"
 TEST_JPG_DATA = TEST_JPG_PATH.read_bytes()
+
+TEST_GIF_PATH = HERE / "test_img.gif"
+TEST_GIF_URL = "https://storage.googleapis.com/generativeai-downloads/data/test_img.gif"
+TEST_GIF_DATA = TEST_GIF_PATH.read_bytes()
 
 
 # simple test function
@@ -65,10 +70,33 @@ class ADataClassWithList:
     a: list[int]
 
 
+class Choices(enum.Enum):
+    A = "a"
+    B = "b"
+    C = "c"
+    D = "d"
+
+
+@dataclasses.dataclass
+class HasEnum:
+    choice: Choices
+
+
 class UnitTests(parameterized.TestCase):
+
+    @parameterized.named_parameters(
+        ["RGBA", PIL.Image.fromarray(np.zeros([6, 6, 4], dtype=np.uint8))],
+        ["RGB", PIL.Image.fromarray(np.zeros([6, 6, 3], dtype=np.uint8))],
+        ["P", PIL.Image.fromarray(np.zeros([6, 6, 3], dtype=np.uint8)).convert("P")],
+    )
+    def test_numpy_to_blob(self, image):
+        blob = content_types.image_to_blob(image)
+        self.assertIsInstance(blob, protos.Blob)
+        self.assertEqual(blob.mime_type, "image/webp")
+        self.assertStartsWith(blob.data, b"RIFF \x00\x00\x00WEBPVP8L")
+
     @parameterized.named_parameters(
         ["PIL", PIL.Image.open(TEST_PNG_PATH)],
-        ["RGBA", PIL.Image.fromarray(np.zeros([6, 6, 4], dtype=np.uint8))],
         ["IPython", IPython.display.Image(filename=TEST_PNG_PATH)],
     )
     def test_png_to_blob(self, image):
@@ -79,7 +107,6 @@ class UnitTests(parameterized.TestCase):
 
     @parameterized.named_parameters(
         ["PIL", PIL.Image.open(TEST_JPG_PATH)],
-        ["RGB", PIL.Image.fromarray(np.zeros([6, 6, 3], dtype=np.uint8))],
         ["IPython", IPython.display.Image(filename=TEST_JPG_PATH)],
     )
     def test_jpg_to_blob(self, image):
@@ -87,6 +114,16 @@ class UnitTests(parameterized.TestCase):
         self.assertIsInstance(blob, protos.Blob)
         self.assertEqual(blob.mime_type, "image/jpeg")
         self.assertStartsWith(blob.data, b"\xff\xd8\xff\xe0\x00\x10JFIF")
+
+    @parameterized.named_parameters(
+        ["PIL", PIL.Image.open(TEST_GIF_PATH)],
+        ["IPython", IPython.display.Image(filename=TEST_GIF_PATH)],
+    )
+    def test_gif_to_blob(self, image):
+        blob = content_types.image_to_blob(image)
+        self.assertIsInstance(blob, protos.Blob)
+        self.assertEqual(blob.mime_type, "image/gif")
+        self.assertStartsWith(blob.data, b"GIF87a")
 
     @parameterized.named_parameters(
         ["BlobDict", {"mime_type": "image/png", "data": TEST_PNG_DATA}],
@@ -398,12 +435,78 @@ class UnitTests(parameterized.TestCase):
         ["empty_dictionary_list", [{"code_execution": {}}]],
     )
     def test_code_execution(self, tools):
-        if isinstance(tools, Iterable):
-            t = content_types._make_tools(tools)
-            self.assertIsInstance(t[0].code_execution, protos.CodeExecution)
-        else:
-            t = content_types._make_tool(tools)  # Pass code execution into tools
-            self.assertIsInstance(t.code_execution, protos.CodeExecution)
+        t = content_types._make_tools(tools)
+        self.assertIsInstance(t[0].code_execution, protos.CodeExecution)
+
+    @parameterized.named_parameters(
+        ["string", "google_search_retrieval"],
+        ["empty_dictionary", {"google_search_retrieval": {}}],
+        [
+            "empty_dictionary_with_dynamic_retrieval_config",
+            {"google_search_retrieval": {"dynamic_retrieval_config": {}}},
+        ],
+        [
+            "dictionary_with_mode_integer",
+            {"google_search_retrieval": {"dynamic_retrieval_config": {"mode": 0}}},
+        ],
+        [
+            "dictionary_with_mode_string",
+            {"google_search_retrieval": {"dynamic_retrieval_config": {"mode": "DYNAMIC"}}},
+        ],
+        [
+            "dictionary_with_dynamic_retrieval_config",
+            {
+                "google_search_retrieval": {
+                    "dynamic_retrieval_config": {"mode": "unspecified", "dynamic_threshold": 0.5}
+                }
+            },
+        ],
+        [
+            "proto_object",
+            protos.GoogleSearchRetrieval(
+                dynamic_retrieval_config=protos.DynamicRetrievalConfig(
+                    mode="MODE_UNSPECIFIED", dynamic_threshold=0.5
+                )
+            ),
+        ],
+        [
+            "proto_passed_in",
+            protos.Tool(
+                google_search_retrieval=protos.GoogleSearchRetrieval(
+                    dynamic_retrieval_config=protos.DynamicRetrievalConfig(
+                        mode="MODE_UNSPECIFIED", dynamic_threshold=0.5
+                    )
+                )
+            ),
+        ],
+        [
+            "proto_object_list",
+            [
+                protos.GoogleSearchRetrieval(
+                    dynamic_retrieval_config=protos.DynamicRetrievalConfig(
+                        mode="MODE_UNSPECIFIED", dynamic_threshold=0.5
+                    )
+                )
+            ],
+        ],
+        [
+            "proto_passed_in_list",
+            [
+                protos.Tool(
+                    google_search_retrieval=protos.GoogleSearchRetrieval(
+                        dynamic_retrieval_config=protos.DynamicRetrievalConfig(
+                            mode="MODE_UNSPECIFIED", dynamic_threshold=0.5
+                        )
+                    )
+                )
+            ],
+        ],
+    )
+    def test_search_grounding(self, tools):
+        if self._testMethodName == "test_search_grounding_empty_dictionary":
+            pass
+        t = content_types._make_tools(tools)
+        self.assertIsInstance(t[0].google_search_retrieval, protos.GoogleSearchRetrieval)
 
     def test_two_fun_is_one_tool(self):
         def a():
@@ -533,6 +636,25 @@ class UnitTests(parameterized.TestCase):
                             "a": {"type_": protos.Type.INTEGER},
                         },
                     ),
+                },
+            ),
+        ],
+        ["enum", Choices, protos.Schema(type=protos.Type.STRING, enum=["a", "b", "c", "d"])],
+        [
+            "enum_list",
+            list[Choices],
+            protos.Schema(
+                type="ARRAY",
+                items=protos.Schema(type=protos.Type.STRING, enum=["a", "b", "c", "d"]),
+            ),
+        ],
+        [
+            "has_enum",
+            HasEnum,
+            protos.Schema(
+                type=protos.Type.OBJECT,
+                properties={
+                    "choice": protos.Schema(type=protos.Type.STRING, enum=["a", "b", "c", "d"])
                 },
             ),
         ],

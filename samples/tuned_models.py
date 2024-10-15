@@ -27,7 +27,7 @@ class UnitTests(absltest.TestCase):
         # [START tuned_models_create]
         import time
 
-        base_model = "models/gemini-1.0-pro-001"
+        base_model = "models/gemini-1.5-flash-001-tuning"
         training_data = [
             {"text_input": "1", "output": "2"},
             # ... more examples ...
@@ -77,7 +77,7 @@ class UnitTests(absltest.TestCase):
         model = genai.GenerativeModel(model_name="tunedModels/my-increment-model")
         result = model.generate_content("III")
         print(result.text)  # "IV"
-        # [END tuned_models_create]
+        # [END tuned_models_generate_content]
 
     def test_tuned_models_get(self):
         # [START tuned_models_get]
@@ -94,7 +94,7 @@ class UnitTests(absltest.TestCase):
     def test_tuned_models_delete(self):
         import time
 
-        base_model = "models/gemini-1.0-pro-001"
+        base_model = "models/gemini-1.5-flash-001-tuning"
         training_data = samples / "increment_tuning_data.json"
         try:
             operation = genai.create_tuned_model(
@@ -215,7 +215,7 @@ class UnitTests(absltest.TestCase):
         # [END tuned_models_permissions_get]
 
     def test_tuned_models_permission_delete(self):
-        # [START tuned_models_permissions_create]
+        # [START tuned_models_permissions_delete]
         model_info = genai.get_model("tunedModels/my-increment-model")
         # [START_EXCLUDE]
         for p in model_info.permissions.list():
@@ -229,7 +229,7 @@ class UnitTests(absltest.TestCase):
         )
 
         public_permission.delete()
-        # [END tuned_models_permissions_create]
+        # [END tuned_models_permissions_delete]
 
 
 if __name__ == "__main__":

@@ -12,13 +12,15 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+from __future__ import annotations
 
 from google.generativeai.types import file_types
 
 import collections
 import datetime
+import io
 import os
-from typing import Iterable, Union
+from typing import Iterable, Sequence
 import pathlib
 
 import google
@@ -37,12 +39,13 @@ class FileServiceClient(client_lib.FileServiceClient):
 
     def create_file(
         self,
-        path: Union[str, pathlib.Path, os.PathLike],
+        path: str | io.IOBase | os.PathLike,
         *,
-        mime_type: Union[str, None] = None,
-        name: Union[str, None] = None,
-        display_name: Union[str, None] = None,
+        mime_type: str | None = None,
+        name: str | None = None,
+        display_name: str | None = None,
         resumable: bool = True,
+        metadata: Sequence[tuple[str, str]] = (),
     ) -> protos.File:
         self.observed_requests.append(
             dict(
@@ -100,12 +103,13 @@ class UnitTests(parameterized.TestCase):
             protos.File(
                 uri="https://test",
                 state="ACTIVE",
+                mime_type="video/quicktime",
                 video_metadata=dict(video_duration=datetime.timedelta(seconds=30)),
                 error=dict(code=7, message="ok?"),
             )
         )
 
-        f = genai.upload_file(path="dummy")
+        f = genai.upload_file(path="dummy.mov")
         self.assertEqual(google.rpc.status_pb2.Status(code=7, message="ok?"), f.error)
         self.assertEqual(
             protos.VideoMetadata(dict(video_duration=datetime.timedelta(seconds=30))),
@@ -139,3 +143,10 @@ class UnitTests(parameterized.TestCase):
     def test_to_file_data(self, file_data):
         file_data = file_types.to_file_data(file_data)
         self.assertEqual(protos.FileData(file_uri="https://test_uri"), file_data)
+
+    def test_webp_mimetype(self):
+        self.responses["create_file"].append(protos.File())
+
+        response = genai.upload_file("test.webp")
+
+        self.assertEqual("image/webp", self.observed_requests[0]["mime_type"])
